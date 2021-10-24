@@ -272,3 +272,147 @@ class NoWTest_body(Dataset):
                 'original_image': torch.tensor(image.transpose(2,0,1)).float(),
                 'bbox': bbox
                 }
+
+### face training data
+# cfg.dataset.head.scale_min = 1.4
+# cfg.dataset.head.scale_max = 1.8
+# cfg.dataset.head.trans_scale = 0.3
+# cfg.dataset.head.blur_step = 1
+from kornia.filters import median_blur, gaussian_blur2d, motion_blur
+class VGGFace2(Dataset):
+    def __init__(self, crop_size, scale=[1, 1], trans_scale = 0., blur_step=1, split='train'):
+        '''
+        K must be less than 6
+        '''
+        self.image_size = crop_size
+        self.imagefolder = '/ps/scratch/face2d3d/train'
+        self.kptfolder = '/ps/scratch/face2d3d/train_annotated_torch7'
+        self.segfolder = '/ps/scratch/face2d3d/texture_in_the_wild_code/VGGFace2_seg/test_crop_size_400_batch'
+        self.attfolder = '/ps/scratch/yfeng/Data/vggface2/gender-DEX'
+        # hq:
+        # datafile = '/ps/scratch/face2d3d/texture_in_the_wild_code/VGGFace2_cleaning_codes/ringnetpp_training_lists/second_cleaning/vggface2_bbx_size_bigger_than_400_train_list_max_normal_100_ring_5_1_serial.npy'
+        if split == 'train':
+            datafile = '/ps/scratch/face2d3d/texture_in_the_wild_code/VGGFace2_cleaning_codes/ringnetpp_training_lists/second_cleaning/vggface2_train_list_max_normal_100_ring_5_1_serial.npy'
+        elif split == 'eval':
+            datafile = '/ps/scratch/face2d3d/texture_in_the_wild_code/VGGFace2_cleaning_codes/ringnetpp_training_lists/second_cleaning/vggface2_val_list_max_normal_100_ring_5_1_serial.npy'
+            self.imagefolder = '/ps/scratch/face2d3d/test'
+            self.kptfolder = '/ps/scratch/face2d3d/test_annotated_torch7'
+        ## for test, no random crop
+        if split != 'train':
+            scale[0] = scale[1] = (scale[0] + scale[1])/2.
+            trans_scale = 0.
+        self.split = split
+        self.data_lines = np.load(datafile).astype('str')
+        self.cropper = array_cropper.Cropper(crop_size, scale, trans_scale)
+        assert blur_step != 0
+        self.blur_step = blur_step
+
+    def __len__(self):
+        return len(self.data_lines)
+
+    def __getitem__(self, idx):
+        # i = 0 # i: 0-6
+        if self.split == 'train':
+            i = np.random.randint(6)
+        else:
+            i = 5
+        name = self.data_lines[idx, i]
+        image_path = os.path.join(self.imagefolder, name + '.jpg')  
+        seg_path = os.path.join(self.segfolder, name + '.npy')  
+        kpt_path = os.path.join(self.kptfolder, name + '.npy')
+        genderpath = os.path.join(self.attfolder, name + '_vote.txt')
+        gender = self.load_gender(genderpath)
+
+        image = imread(image_path)/255.
+        kpt = np.load(kpt_path)[:,:2]
+        mask = self.load_mask(seg_path, image.shape[0], image.shape[1])
+
+        ### crop information
+        arrays = np.concatenate([image, mask], axis=-1)
+        cropped_tensor, tform = self.cropper.crop(arrays, kpt)
+        cropped_image = cropped_tensor[:,:,:3]
+        cropped_mask = cropped_tensor[:,:,-1:]
+        ## transform kpt 
+        cropped_kpt = np.dot(np.hstack([kpt[:,:2], np.ones([kpt.shape[0],1])]), tform) # np.linalg.inv(tform.params)
+
+        # normalized kpt
+        cropped_kpt[:,:2] = cropped_kpt[:,:2]/self.image_size * 2  - 1
+        cropped_kpt[:,[2]] = np.ones([kpt.shape[0],1]) # conf is 1
+        
+        ###
+        image = torch.from_numpy(cropped_image.transpose(2,0,1)).type(dtype = torch.float32) 
+        kpt = torch.from_numpy(cropped_kpt).type(dtype = torch.float32) 
+        mask = torch.from_numpy(cropped_mask.transpose(2,0,1)).type(dtype = torch.float32) 
+
+        image_hd = image.clone()
+
+        if idx%self.blur_step  == 0:
+            ### augment image resolution
+            # blur_types = ['res', 'gaussian', 'median', 'motion']
+            # more gaussian blur
+            blur_types = ['res', 'gaussian', 'gaussian', 'motion']
+            blur_type =  blur_types[np.random.randint(len(blur_types))]
+            if blur_type == 'res':
+                # self.resolution_scale : 0.1 ~ 1.2
+                res_scale = np.random.rand() * 0.4 + 0.1
+                image = image[None]
+                res_size = int(res_scale*self.image_size)
+                image = F.interpolate(image, (res_size, res_size), mode='bilinear')#, align_corners=False)
+                image = F.interpolate(image, (self.image_size, self.image_size), mode='bilinear')#, align_corners=False)
+                image = image.squeeze()
+            elif blur_type == 'gaussion':
+                ks = np.random.randint(5)*2 + 9
+                sigma = np.random.randint(5)*0.2 + 1.2
+                image = image[None]
+                image = util.gaussian_blur(image, kernel_size=(ks,ks), sigma=(sigma,sigma))
+                image = image.squeeze()
+            elif blur_type == 'median':
+                ks = np.random.randint(3)*2 + 5
+                image = image[None]
+                image = median_blur(image, kernel_size=(ks,ks))
+                image = image.squeeze()
+            elif blur_type == 'motion':
+                ks = np.random.randint(6)*2 + 7
+                angle = np.random.rand()*180 - 90
+                direction = np.random.randint(21)*0.1 - 1
+                image = image[None]
+                image = motion_blur(image, kernel_size=ks, angle=angle, direction=direction)
+                image = image.squeeze()
+                # for motion blur, the position will change
+                image_hd = image
+        ## 
+        data_dict = {
+            'image': image,
+            'image_hd': image_hd,
+            'face_kpt': kpt,
+            'smplx_kpt': kpt,
+            'mask': mask,
+            'gender': gender
+        }
+        
+        return data_dict
+
+    def load_mask(self, maskpath, h, w):
+        # print(maskpath)
+        if os.path.isfile(maskpath):
+            vis_parsing_anno = np.load(maskpath)
+            # atts = ['skin', 'l_brow', 'r_brow', 'l_eye', 'r_eye', 'eye_g', 'l_ear', 'r_ear', 'ear_r',
+            #     'nose', 'mouth', 'u_lip', 'l_lip', 'neck', 'neck_l', 'cloth', 'hair', 'hat']
+            mask = np.zeros_like(vis_parsing_anno)
+            # for i in range(1, 16):
+            mask[vis_parsing_anno>0.5] = 1.
+        else:
+            mask = np.ones((h, w))
+        return mask[:,:,None]
+
+    def load_gender(self, genderpath):
+        if os.path.exists(genderpath) is False:
+            return 'N'
+        with open(genderpath, 'r') as f:
+            label = f.readline()
+        if label == 'female' or label == 'Woman':
+            return 'F'
+        elif label == 'male' or label == 'Man':
+            return 'M'
+        else:
+            return 'N'
