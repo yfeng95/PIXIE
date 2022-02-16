@@ -25,9 +25,10 @@ cd PIXIE
     If there occurs a compiling error, you can install [pytorch3d](https://github.com/facebookresearch/pytorch3d/blob/master/INSTALL.md) instead and set --rasterizer_type=pytorch3d when running the demos. 
 
 #### Pre-trained model and data
-  * Download [SMPL-X Model](http://smpl-x.is.tue.mpg.de/). Choose 'SMPL-X 2020' to download 'SMPLX_NEUTRAL_2020.npz', put it into `./data`  
-  * Download [PIXIE data](http://pixie.is.tue.mpg.de/): 
-      * the pre-trained model 'pixie_model.tar' and place it into `./data`   
-      * the utilities file `utilities.zip` and extract its contents into `./data`  
+  * Register [SMPL-X Model](http://smpl-x.is.tue.mpg.de/)
+  * Register [PIXIE data](http://pixie.is.tue.mpg.de/)
+  ```bash
+  bash fetch_model.sh # username & password are required
+  ```
   * (Optional) Follow the instructions for the [Albedo model](https://github.com/TimoBolkart/BFM_to_FLAME) to get 'FLAME_albedo_from_BFM.npz'. Put it into `./data`  
   * (Optional) Clone and prepare [DECA](https://github.com/YadiraF/DECA)
