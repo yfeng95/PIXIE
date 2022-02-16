@@ -54,4 +54,7 @@ pixie-env
 eval-script
 results
 scripts
+data/*
+!data/*.png
+Testsamples/*/results
 
