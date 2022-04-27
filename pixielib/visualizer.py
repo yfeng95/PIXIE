@@ -110,7 +110,7 @@ class Visualizer(object):
         if torch.is_tensor(flame_texture):
             device = flame_texture.device
             dtype = flame_texture.dtype
-            flame_texture = flame_texture[0].cpu().numpy().transpose(1,2,0)
+            flame_texture = flame_texture[0].cpu().detach().numpy().transpose(1,2,0)
             if smplx_texture is None:
                 smplx_texture = self.smplx_texture
             smplx_texture = texture_flame2smplx(self.cached_data, flame_texture, smplx_texture)
