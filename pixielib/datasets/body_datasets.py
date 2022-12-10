@@ -101,6 +101,7 @@ class TestData(Dataset):
             src_pts = np.array([[0, 0], [0, h-1], [w-1, 0]])
             left = 0; right = w-1; top=0; bottom=h-1
             bbox = [left, top, right, bottom]
+            size = max(right - left, bottom - top)
 
         # crop image
         DST_PTS = np.array([[0,0], [0,self.crop_size - 1], [self.crop_size - 1, 0]])
