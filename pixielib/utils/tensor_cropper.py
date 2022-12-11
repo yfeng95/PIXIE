@@ -7,6 +7,7 @@ return: cropped image, tform(used for transform the keypoint accordingly)
 only support crop to squared images
 '''
 import torch
+import kornia
 from kornia.geometry.transform.imgwarp import (
     warp_perspective, get_perspective_transform, warp_affine
 )
@@ -75,9 +76,14 @@ def crop_tensor(image, center, bbox_size, crop_size, interpolation = 'bilinear',
     # dst_trans_src = dst_trans_src.expand(batch_size, -1, -1)
 
     # warp images 
-    cropped_image = warp_affine(
+    if kornia.__version__ <= '0.4.0':
+        cropped_image = warp_affine(
         image, dst_trans_src[:, :2, :], (crop_size, crop_size),
         flags=interpolation, align_corners=align_corners)
+    else:
+        cropped_image = warp_affine(
+        image, dst_trans_src[:, :2, :], (crop_size, crop_size),
+        mode=interpolation, align_corners=align_corners)
 
     tform = torch.transpose(dst_trans_src, 2, 1)
     # tform = torch.inverse(dst_trans_src)
