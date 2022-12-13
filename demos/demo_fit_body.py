@@ -99,7 +99,7 @@ def main(args):
             visualizer.rotate_results(opdict, visdict=visdict, savepath=os.path.join(savefolder, f'{name}_vis.gif'))
         if args.saveObj:
             visualizer.save_obj(os.path.join(savefolder, name, f'{name}.obj'), opdict)
-        if args.saveParam:
+        if args.saveParam and batch['bbox'] is not None:
             codedict['bbox'] = batch['bbox']
             util.save_pkl(os.path.join(savefolder, name, f'{name}_param.pkl'), codedict)
             np.savetxt(os.path.join(savefolder, name, f'{name}_bbox.txt'), batch['bbox'].squeeze())

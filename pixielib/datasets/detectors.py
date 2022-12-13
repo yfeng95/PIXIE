@@ -51,7 +51,7 @@ class FasterRCNN(object):
         '''
         prediction = self.model(input.to(self.device))[0]
         inds = (prediction['labels']==1)*(prediction['scores']>0.5)
-        if len(inds) < 1:
+        if len(inds) < 1 or len(prediction['boxes'][inds]) < 1:
             return None
         else:
             bbox = prediction['boxes'][inds][0].cpu().numpy()
